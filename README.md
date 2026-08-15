@@ -64,6 +64,52 @@ shvl group list
 shvl group remove editors/neovim
 ```
 
+## Building
+
+### Cargo
+
+```
+cargo build --release
+```
+
+Needs a C linker on `PATH`; on NixOS run it inside `nix develop`.
+
+### Nix
+
+```
+nix develop          # dev shell, adds rust-analyzer, rustfmt, clippy
+nix build            # flakes
+nix-build            # without flakes
+```
+
+### As a flake input
+
+Exposes `packages.<system>.default` for `x86_64-linux` and `aarch64-linux`.
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    shvl.url = "github:<owner>/shvl";
+    shvl.inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  outputs =
+    { nixpkgs, shvl, ... }:
+    {
+      nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          ./configuration.nix
+          ({ pkgs, ... }: {
+            environment.systemPackages = [ shvl.packages.${pkgs.system}.default ];
+          })
+        ];
+      };
+    };
+}
+```
+
 ## Group files
 
 A group file is a function that takes `pkgs` and returns a list of packages.
