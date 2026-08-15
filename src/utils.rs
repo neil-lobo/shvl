@@ -2,10 +2,11 @@ use rnix::ast::Expr;
 use std::collections::BTreeSet;
 use std::println;
 use std::{
-    env::var_os,
     fs,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf, absolute},
 };
+
+use crate::config::get_config;
 
 #[derive(Debug)]
 pub struct Group {
@@ -89,27 +90,10 @@ pub fn get_base_dir(override_dir: Option<&String>) -> Result<PathBuf, String> {
     let mut dir = "/etc/nixos/.shvl".to_string();
 
     // look at local config
-    let mut local_config = var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or("Could not read $HOME environment variable. Please use --dir instead.")?;
-    local_config.push(".local/share/shvl/dir");
-
-    let exists = match fs::exists(&local_config) {
-        Ok(exists) => exists,
-        Err(_) => {
-            println!("error checking for local config, skipping.");
-            false
-        }
+    let config = get_config();
+    if let Ok(config) = config {
+        dir = config.base_dir;
     };
-
-    if exists {
-        let config_dir = fs::read_to_string(&local_config)
-            .unwrap()
-            .trim()
-            .to_string();
-
-        dir = config_dir;
-    }
 
     Ok(PathBuf::from(dir))
 }
