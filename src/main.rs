@@ -49,16 +49,16 @@ fn select_group(group_names: &[String]) -> Result<&String, String> {
 }
 
 fn main() -> Result<(), String> {
-    let group_arg = Arg::new("group").short('g').long("group");
-    let package_arg = Arg::new("package")
-        .help("The name of the package to add")
-        .required(true);
+    let group_arg = Arg::new("group")
+        .short('g')
+        .long("group")
+        .help("Group name");
+    let package_arg = Arg::new("package").help("Package name").required(true);
 
-    let matches = Command::new("np")
+    let matches = Command::new("shvl")
         .disable_help_subcommand(true)
         .subcommand_required(true)
         .arg_required_else_help(true)
-        .about("A package management tool")
         .subcommand(
             Command::new("add")
                 .about("Add a package to a group")
@@ -74,17 +74,31 @@ fn main() -> Result<(), String> {
         )
         .subcommand(
             Command::new("group")
+                .about("Group commands")
                 .disable_help_subcommand(true)
                 .subcommand_required(true)
                 .arg_required_else_help(true)
-                .subcommand(Command::new("create").arg(Arg::new("group").required(true)))
-                .subcommand(Command::new("info").arg(Arg::new("group").required(true)))
-                .subcommand(Command::new("remove").arg(Arg::new("group").required(true)))
-                .subcommand(Command::new("list")),
+                .subcommand(
+                    Command::new("create")
+                        .about("Create a group")
+                        .arg(Arg::new("group").help("Group name").required(true)),
+                )
+                .subcommand(
+                    Command::new("info")
+                        .about("Get a info about a group")
+                        .arg(Arg::new("group").help("Group name").required(true)),
+                )
+                .subcommand(
+                    Command::new("remove")
+                        .about("Remove a group")
+                        .arg(Arg::new("group").help("Group name").required(true)),
+                )
+                .subcommand(Command::new("list").about("List groups")),
         )
-        .arg(Arg::new("dir").short('d').long("dir"))
+        .arg(Arg::new("dir").help("Set base dir").short('d').long("dir"))
         .arg(
             Arg::new("verbose")
+                .help("Enable verbose logs")
                 .short('v')
                 .long("verbose")
                 .action(ArgAction::SetTrue),
