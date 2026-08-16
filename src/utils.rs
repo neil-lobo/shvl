@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::config::{Config, get_config};
+use crate::config::Config;
 
 #[derive(Debug)]
 pub struct Group {
@@ -15,8 +15,7 @@ pub struct Group {
 }
 
 #[derive(Clone)]
-pub struct Context {
-    pub config: Option<Config>,
+pub struct CommandContext {
     pub dir_flag: Option<String>,
 }
 
@@ -87,20 +86,8 @@ pub fn group_path(base: &Path, group: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-pub fn get_base_dir(ctx: Context) -> Result<PathBuf, String> {
-    if let Some(override_dir) = ctx.dir_flag {
-        return Ok(PathBuf::from(override_dir));
-    }
-
-    // look at local config
-    if let Some(config) = ctx.config {
-        if let Some(base_dir) = config.base_dir {
-            return Ok(PathBuf::from(base_dir));
-        };
-    };
-
-    // default /etc/nixos/shvl
-    Ok(PathBuf::from("/etc/nixos/.shvl"))
+pub fn get_base_dir(config: Config) -> Result<PathBuf, String> {
+    Ok(PathBuf::from(config.base_dir))
 }
 
 // TODO: move to group file? rename to deserialize?
@@ -208,8 +195,8 @@ pub fn default_group(name: String) -> Group {
     }
 }
 
-pub fn get_group_names(ctx: Context) -> Result<Vec<String>, String> {
-    let dir = get_base_dir(ctx)?;
+pub fn get_group_names(config: Config) -> Result<Vec<String>, String> {
+    let dir = get_base_dir(config)?;
 
     if !dir.is_dir() {
         return Err("no groups found".to_string());
