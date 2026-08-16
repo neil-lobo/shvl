@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
-    pub base_dir: String,
+    pub base_dir: Option<String>,
 }
 
 pub fn get_config() -> Result<Config, String> {

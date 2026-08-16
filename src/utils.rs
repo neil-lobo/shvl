@@ -86,16 +86,16 @@ pub fn get_base_dir(override_dir: Option<&String>) -> Result<PathBuf, String> {
         return Ok(PathBuf::from(override_dir.unwrap().to_string()));
     }
 
-    // default /etc/nixos/shvl
-    let mut dir = "/etc/nixos/.shvl".to_string();
-
     // look at local config
     let config = get_config();
     if let Ok(config) = config {
-        dir = config.base_dir;
+        if let Some(base_dir) = config.base_dir {
+            return Ok(PathBuf::from(base_dir));
+        };
     };
 
-    Ok(PathBuf::from(dir))
+    // default /etc/nixos/shvl
+    Ok(PathBuf::from("/etc/nixos/.shvl"))
 }
 
 // TODO: move to group file? rename to deserialize?
