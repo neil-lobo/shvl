@@ -4,6 +4,7 @@ use clap::{Arg, Command};
 use dialoguer::{FuzzySelect, console::Term};
 
 mod commands;
+mod config;
 mod utils;
 
 /// dialoguer hides the terminal cursor while a prompt is on screen and only
