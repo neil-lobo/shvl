@@ -47,13 +47,6 @@ shvl group remove <group>
 shvl group list
 ```
 
-### Options
-
-```
--g, --group <group>    Target group. Prompts interactively when omitted.
--d, --dir <dir>        Override the .shvl directory for a single command.
-```
-
 ### Examples
 
 ```
