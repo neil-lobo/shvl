@@ -17,7 +17,7 @@ impl PartialConfig {
     /// `self` takes precedent in merge
     pub fn merge(self, other: PartialConfig) -> Self {
         PartialConfig {
-            base_dir: other.base_dir.or(self.base_dir),
+            base_dir: self.base_dir.or(other.base_dir),
         }
     }
 
