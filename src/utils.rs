@@ -6,12 +6,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::config::get_config;
+use crate::config::{Config, get_config};
 
 #[derive(Debug)]
 pub struct Group {
     pub name: String,
     pub packages: BTreeSet<String>,
+}
+
+#[derive(Clone)]
+pub struct Context {
+    pub config: Option<Config>,
+    pub dir_flag: Option<String>,
 }
 
 /// Validates a group name. Group names are `/` separated paths relative to the
@@ -81,14 +87,13 @@ pub fn group_path(base: &Path, group: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-pub fn get_base_dir(override_dir: Option<&String>) -> Result<PathBuf, String> {
-    if !override_dir.is_none() {
-        return Ok(PathBuf::from(override_dir.unwrap().to_string()));
+pub fn get_base_dir(ctx: Context) -> Result<PathBuf, String> {
+    if let Some(override_dir) = ctx.dir_flag {
+        return Ok(PathBuf::from(override_dir));
     }
 
     // look at local config
-    let config = get_config();
-    if let Some(config) = config {
+    if let Some(config) = ctx.config {
         if let Some(base_dir) = config.base_dir {
             return Ok(PathBuf::from(base_dir));
         };
@@ -203,8 +208,8 @@ pub fn default_group(name: String) -> Group {
     }
 }
 
-pub fn get_group_names(dir: Option<&String>) -> Result<Vec<String>, String> {
-    let dir = get_base_dir(dir)?;
+pub fn get_group_names(ctx: Context) -> Result<Vec<String>, String> {
+    let dir = get_base_dir(ctx)?;
 
     if !dir.is_dir() {
         return Err("no groups found".to_string());

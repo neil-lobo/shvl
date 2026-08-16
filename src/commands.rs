@@ -1,10 +1,10 @@
 use std::{fs, println};
 use tabled::{builder::Builder, settings::Style};
 
-use crate::utils::{self, default_group, parse_group_file, stringify_group};
+use crate::utils::{self, Context, default_group, parse_group_file, stringify_group};
 
-pub fn create_group(dir: Option<&String>, group: &String) -> Result<(), String> {
-    let dir = utils::get_base_dir(dir)?;
+pub fn create_group(ctx: Context, group: &String) -> Result<(), String> {
+    let dir = utils::get_base_dir(ctx)?;
 
     if dir.is_file() {
         return Err("file named '.shvl' found".to_string());
@@ -45,8 +45,8 @@ pub fn create_group(dir: Option<&String>, group: &String) -> Result<(), String> 
     Ok(())
 }
 
-pub fn remove_group(dir: Option<&String>, group: &String) -> Result<(), String> {
-    let dir = utils::get_base_dir(dir)?;
+pub fn remove_group(ctx: Context, group: &String) -> Result<(), String> {
+    let dir = utils::get_base_dir(ctx)?;
 
     if dir.is_file() {
         return Err("file named '.shvl' found".to_owned());
@@ -76,8 +76,8 @@ pub fn remove_group(dir: Option<&String>, group: &String) -> Result<(), String> 
     Ok(())
 }
 
-pub fn group_info(dir: Option<&String>, group: &String) -> Result<(), String> {
-    let dir = utils::get_base_dir(dir)?;
+pub fn group_info(ctx: Context, group: &String) -> Result<(), String> {
+    let dir = utils::get_base_dir(ctx)?;
     let path = utils::group_path(&dir, group)?;
 
     let exists = fs::exists(&path).or(Err("Unable to find group file"))?;
@@ -105,8 +105,8 @@ pub fn group_info(dir: Option<&String>, group: &String) -> Result<(), String> {
     Ok(())
 }
 
-pub fn list_groups(dir: Option<&String>) -> Result<(), String> {
-    let group_names = utils::get_group_names(dir)?;
+pub fn list_groups(ctx: Context) -> Result<(), String> {
+    let group_names = utils::get_group_names(ctx)?;
 
     let mut builder = Builder::new();
     builder.push_record(["Groups:"]);
@@ -121,8 +121,8 @@ pub fn list_groups(dir: Option<&String>) -> Result<(), String> {
     Ok(())
 }
 
-pub fn add_package(dir: Option<&String>, group: &String, package: &String) -> Result<(), String> {
-    let dir = utils::get_base_dir(dir)?;
+pub fn add_package(ctx: Context, group: &String, package: &String) -> Result<(), String> {
+    let dir = utils::get_base_dir(ctx)?;
     let path = utils::group_path(&dir, group)?;
 
     let nix = fs::read_to_string(&path).or(Err("Unable to read file"))?;
@@ -139,12 +139,8 @@ pub fn add_package(dir: Option<&String>, group: &String, package: &String) -> Re
     Ok(())
 }
 
-pub fn remove_package(
-    dir: Option<&String>,
-    group: &String,
-    package: &String,
-) -> Result<(), String> {
-    let dir = utils::get_base_dir(dir)?;
+pub fn remove_package(ctx: Context, group: &String, package: &String) -> Result<(), String> {
+    let dir = utils::get_base_dir(ctx)?;
     let path = utils::group_path(&dir, group)?;
 
     let nix = fs::read_to_string(&path).or(Err("Unable to read file"))?;

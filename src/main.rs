@@ -3,6 +3,8 @@ use std::println;
 use clap::{Arg, Command};
 use dialoguer::{FuzzySelect, console::Term};
 
+use crate::{config::get_config, utils::Context};
+
 mod commands;
 mod config;
 mod utils;
@@ -83,7 +85,12 @@ fn main() -> Result<(), String> {
         .arg(Arg::new("dir").short('d').long("dir"))
         .get_matches();
 
-    let dir = matches.get_one::<String>("dir");
+    let dir = matches.get_one::<String>("dir").cloned();
+
+    let ctx: Context = Context {
+        config: get_config(),
+        dir_flag: dir,
+    };
 
     if matches.subcommand().is_none() {
         return Err("Unreachable".to_owned());
@@ -96,7 +103,7 @@ fn main() -> Result<(), String> {
             let package = submatches
                 .get_one::<String>("package")
                 .expect("package name");
-            let group_names = utils::get_group_names(dir.clone())?;
+            let group_names = utils::get_group_names(ctx.clone())?;
 
             let group = if let Some(group) = submatches.get_one::<String>("group") {
                 group
@@ -105,13 +112,13 @@ fn main() -> Result<(), String> {
             };
 
             println!("add -g {group} {package}");
-            commands::add_package(dir.clone(), group, package)
+            commands::add_package(ctx, group, package)
         }
         "remove" => {
             let package = submatches
                 .get_one::<String>("package")
                 .expect("pacakge name");
-            let group_names = utils::get_group_names(dir.clone())?;
+            let group_names = utils::get_group_names(ctx.clone())?;
 
             let group = if let Some(group) = submatches.get_one::<String>("group") {
                 group
@@ -120,7 +127,7 @@ fn main() -> Result<(), String> {
             };
 
             println!("remove -g {group} {package}");
-            commands::remove_package(dir.clone(), group, package)
+            commands::remove_package(ctx, group, package)
         }
         "group" => {
             if submatches.subcommand().is_none() {
@@ -133,17 +140,17 @@ fn main() -> Result<(), String> {
                 "create" => {
                     let group = submatches.get_one::<String>("group").unwrap();
 
-                    commands::create_group(dir.clone(), group)
+                    commands::create_group(ctx.clone(), group)
                 }
                 "info" => {
                     let group = submatches.get_one::<String>("group").unwrap();
-                    commands::group_info(dir.clone(), group)
+                    commands::group_info(ctx.clone(), group)
                 }
                 "remove" => {
                     let group = submatches.get_one::<String>("group").unwrap();
-                    commands::remove_group(dir.clone(), group)
+                    commands::remove_group(ctx.clone(), group)
                 }
-                "list" => commands::list_groups(dir.clone()),
+                "list" => commands::list_groups(ctx.clone()),
                 _ => Err("Unreachable".to_owned()),
             }?;
 

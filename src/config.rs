@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::{env::var_os, fs, path::PathBuf};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     pub base_dir: Option<String>,
 }
