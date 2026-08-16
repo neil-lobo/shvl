@@ -88,7 +88,7 @@ pub fn get_base_dir(override_dir: Option<&String>) -> Result<PathBuf, String> {
 
     // look at local config
     let config = get_config();
-    if let Ok(config) = config {
+    if let Some(config) = config {
         if let Some(base_dir) = config.base_dir {
             return Ok(PathBuf::from(base_dir));
         };
