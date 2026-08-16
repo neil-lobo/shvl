@@ -14,9 +14,10 @@ pub struct Group {
     pub packages: BTreeSet<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CommandContext {
     pub dir_flag: Option<String>,
+    pub verbose_log: bool,
 }
 
 /// Validates a group name. Group names are `/` separated paths relative to the

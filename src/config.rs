@@ -3,14 +3,16 @@ use std::{env::var_os, fs, path::PathBuf};
 
 use crate::utils::CommandContext;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct PartialConfig {
     pub base_dir: Option<String>,
+    pub verbose: Option<bool>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Config {
     pub base_dir: String,
+    pub verbose: bool,
 }
 
 impl PartialConfig {
@@ -18,6 +20,7 @@ impl PartialConfig {
     pub fn merge(self, other: PartialConfig) -> Self {
         PartialConfig {
             base_dir: self.base_dir.or(other.base_dir),
+            verbose: self.verbose.or(other.verbose),
         }
     }
 
@@ -33,6 +36,7 @@ impl PartialConfig {
     pub fn merge_default(self) -> Config {
         Config {
             base_dir: self.base_dir.unwrap_or("/etc/nixos/.shvl".to_owned()),
+            verbose: self.verbose.unwrap_or(false),
         }
     }
 }
@@ -41,58 +45,70 @@ impl From<CommandContext> for PartialConfig {
     fn from(ctx: CommandContext) -> Self {
         PartialConfig {
             base_dir: ctx.dir_flag,
+            verbose: Some(ctx.verbose_log),
         }
     }
 }
 
 pub fn get_config(ctx: CommandContext) -> Config {
-    let config = PartialConfig::from(ctx)
-        .merge_option(get_config_from_file())
+    let config = PartialConfig::from(ctx.clone())
+        .merge_option(get_config_from_file(ctx))
         .merge_default();
 
     config
 }
 
-fn get_config_from_file() -> Option<PartialConfig> {
+fn get_config_from_file(ctx: CommandContext) -> Option<PartialConfig> {
     let local_config = if let Some(mut local_config) = var_os("HOME").map(PathBuf::from) {
         local_config.push(".local/share/shvl/config.json");
         Some(local_config)
     } else {
-        // TODO: print wanring
-        // .ok_or("Could not read $HOME environment variable. Please use --dir instead.")?;
+        println!("[WARN] Could not read $HOME environment variable. Please use --dir instead.");
         None
     }?;
+
+    if ctx.verbose_log {
+        println!(
+            "[DEBUG] loading config file from '{}'",
+            local_config.to_str().unwrap_or("None")
+        )
+    }
 
     let exists = if let Ok(exists) = fs::exists(&local_config) {
         Some(exists)
     } else {
-        // TODO: print warning
-        //         println!("error checking for local config, skipping.");
+        println!("[WARN] Could not determine if local config exists or not, skipping.");
         None
     }?;
 
     if !exists {
-        // TODO: print debug
+        if ctx.verbose_log {
+            println!(
+                "[DEBUG] config file '{}' does not exist",
+                local_config.to_str().unwrap_or("None")
+            )
+        }
+
         return None;
-        // return Err(ConfigError::MissingFile);
-        // return Err("config file does not exist".to_owned());
     }
 
     let config_json = if let Ok(config_json) = fs::read_to_string(&local_config) {
         Some(config_json)
     } else {
-        // TODO: print warning
-        // .or(Err("cannot read config file"))?;
+        println!("[WARN] Unable to read config file, skipping.");
         None
     }?;
 
     let config = if let Ok(config) = serde_json::from_str::<PartialConfig>(&config_json) {
         Some(config)
     } else {
-        // TODO: print warning
-        // .or(Err("Unable to parse config file"))?;
+        println!("[WARN] Unable to parse config file, skipping.");
         None
     }?;
+
+    if ctx.verbose_log {
+        println!("[DEBUG] config loaded from file: {config:?}")
+    }
 
     Some(config)
 }

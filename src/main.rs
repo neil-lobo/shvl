@@ -1,6 +1,6 @@
 use std::println;
 
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use dialoguer::{FuzzySelect, console::Term};
 
 use crate::{config::get_config, utils::CommandContext};
@@ -83,12 +83,31 @@ fn main() -> Result<(), String> {
                 .subcommand(Command::new("list")),
         )
         .arg(Arg::new("dir").short('d').long("dir"))
+        .arg(
+            Arg::new("verbose")
+                .short('v')
+                .long("verbose")
+                .action(ArgAction::SetTrue),
+        )
         .get_matches();
 
     let dir = matches.get_one::<String>("dir").cloned();
+    let verbose = matches.get_flag("verbose");
 
-    let ctx: CommandContext = CommandContext { dir_flag: dir };
+    let ctx: CommandContext = CommandContext {
+        dir_flag: dir,
+        verbose_log: verbose,
+    };
+
+    if ctx.verbose_log {
+        println!("[DEBUG] command context: {ctx:?}");
+    }
+
     let config = get_config(ctx);
+
+    if config.verbose {
+        println!("[DEBUG] final merged config: {config:?}")
+    }
 
     if matches.subcommand().is_none() {
         return Err("Unreachable".to_owned());
@@ -109,8 +128,10 @@ fn main() -> Result<(), String> {
                 select_group(&group_names)?
             };
 
-            println!("add -g {group} {package}");
-            commands::add_package(config, group, package)
+            commands::add_package(config, group, package)?;
+            println!("Package '{package}' added to group '{group}'");
+
+            Ok(())
         }
         "remove" => {
             let package = submatches
@@ -124,8 +145,10 @@ fn main() -> Result<(), String> {
                 select_group(&group_names)?
             };
 
-            println!("remove -g {group} {package}");
-            commands::remove_package(config, group, package)
+            commands::remove_package(config, group, package)?;
+            println!("Package '{package}' removed from group '{group}'");
+
+            Ok(())
         }
         "group" => {
             if submatches.subcommand().is_none() {
@@ -138,7 +161,9 @@ fn main() -> Result<(), String> {
                 "create" => {
                     let group = submatches.get_one::<String>("group").unwrap();
 
-                    commands::create_group(config.clone(), group)
+                    commands::create_group(config.clone(), group)?;
+                    println!("Group '{group}' created");
+                    Ok(())
                 }
                 "info" => {
                     let group = submatches.get_one::<String>("group").unwrap();
@@ -146,7 +171,9 @@ fn main() -> Result<(), String> {
                 }
                 "remove" => {
                     let group = submatches.get_one::<String>("group").unwrap();
-                    commands::remove_group(config.clone(), group)
+                    commands::remove_group(config.clone(), group)?;
+                    println!("Group '{group}' removed");
+                    Ok(())
                 }
                 "list" => commands::list_groups(config.clone()),
                 _ => Err("Unreachable".to_owned()),

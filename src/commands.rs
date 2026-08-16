@@ -7,7 +7,11 @@ use crate::{
 };
 
 pub fn create_group(config: Config, group: &String) -> Result<(), String> {
-    let dir = utils::get_base_dir(config)?;
+    if config.verbose {
+        println!("[DEBUG] creating group '{group}'");
+    }
+
+    let dir = utils::get_base_dir(config.clone())?;
 
     if dir.is_file() {
         return Err("file named '.shvl' found".to_string());
@@ -30,6 +34,13 @@ pub fn create_group(config: Config, group: &String) -> Result<(), String> {
     // create any subdirectories the group name asks for
     let parent = path.parent().ok_or("invalid group path")?;
     if !parent.exists() {
+        if config.verbose {
+            println!(
+                "[DEBUG] parent folder of group file does not exist, creating '{}'",
+                parent.to_str().unwrap_or("None")
+            )
+        }
+
         fs::create_dir_all(parent)
             .or(Err(format!("Unable to create dir: {}", parent.display())))?;
     }
@@ -42,6 +53,10 @@ pub fn create_group(config: Config, group: &String) -> Result<(), String> {
 
     let group_file_str = stringify_group(default_group)?;
 
+    if config.verbose {
+        println!("[DEBUG] writing file '{}'", path.to_str().unwrap_or("None"));
+    }
+
     fs::write(&path, group_file_str)
         .or(Err(format!("Unable to write to file: {}", &path.display())))?;
 
@@ -49,6 +64,10 @@ pub fn create_group(config: Config, group: &String) -> Result<(), String> {
 }
 
 pub fn remove_group(config: Config, group: &String) -> Result<(), String> {
+    if config.verbose {
+        println!("[DEBUG] removing group '{group}'")
+    }
+
     let dir = utils::get_base_dir(config)?;
 
     if dir.is_file() {
@@ -80,8 +99,16 @@ pub fn remove_group(config: Config, group: &String) -> Result<(), String> {
 }
 
 pub fn group_info(config: Config, group: &String) -> Result<(), String> {
-    let dir = utils::get_base_dir(config)?;
+    if config.verbose {
+        println!("[DEBUG] getting info for group '{group}'");
+    }
+
+    let dir = utils::get_base_dir(config.clone())?;
     let path = utils::group_path(&dir, group)?;
+
+    if config.verbose {
+        println!("[DEBUG] group path: '{}'", path.to_str().unwrap_or("None"))
+    }
 
     let exists = fs::exists(&path).or(Err("Unable to find group file"))?;
 
@@ -125,8 +152,16 @@ pub fn list_groups(config: Config) -> Result<(), String> {
 }
 
 pub fn add_package(config: Config, group: &String, package: &String) -> Result<(), String> {
-    let dir = utils::get_base_dir(config)?;
+    if config.verbose {
+        println!("[DEBUG] adding package '{package}' to group '{group}'")
+    }
+
+    let dir = utils::get_base_dir(config.clone())?;
     let path = utils::group_path(&dir, group)?;
+
+    if config.verbose {
+        println!("[DEBUG] group path: '{}'", path.to_str().unwrap_or("None"))
+    }
 
     let nix = fs::read_to_string(&path).or(Err("Unable to read file"))?;
 
@@ -143,8 +178,16 @@ pub fn add_package(config: Config, group: &String, package: &String) -> Result<(
 }
 
 pub fn remove_package(config: Config, group: &String, package: &String) -> Result<(), String> {
-    let dir = utils::get_base_dir(config)?;
+    if config.verbose {
+        println!("[DEBUG] removing package '{package}' to group '{group}'")
+    }
+
+    let dir = utils::get_base_dir(config.clone())?;
     let path = utils::group_path(&dir, group)?;
+
+    if config.verbose {
+        println!("[DEBUG] group path: '{}'", path.to_str().unwrap_or("None"))
+    }
 
     let nix = fs::read_to_string(&path).or(Err("Unable to read file"))?;
 
