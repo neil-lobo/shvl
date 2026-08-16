@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use std::println;
 use std::{
     fs,
-    path::{Path, PathBuf, absolute},
+    path::{Path, PathBuf},
 };
 
 use crate::config::get_config;
