@@ -166,7 +166,13 @@ pub fn add_package(config: Config, group: &String, package: &String) -> Result<(
 
     let mut group = parse_group_file(group, &nix)?;
 
-    // TODO: custom insert method that errors if entry already exists
+    if group.packages.contains(package) {
+        bail!(format!(
+            "Package '{package}' already exists in group '{}'",
+            group.name
+        ))
+    }
+
     group.packages.insert(package.to_owned());
 
     let serialized_group = stringify_group(group);
@@ -192,7 +198,13 @@ pub fn remove_package(config: Config, group: &String, package: &String) -> Resul
 
     let mut group = parse_group_file(group, &nix)?;
 
-    // TODO: custom remove method that errors if entry does not exist
+    if !group.packages.contains(package) {
+        bail!(format!(
+            "Package '{package}' does not exist in group '{}'",
+            group.name
+        ));
+    }
+
     group.packages.remove(package);
 
     let serialized_group = stringify_group(group);
