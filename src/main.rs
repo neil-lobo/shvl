@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgAction, Command};
 use dialoguer::{FuzzySelect, console::Term};
-use std::println;
+use std::{path::PathBuf, println};
 
 use crate::{config::get_config, utils::CommandContext};
 
@@ -105,7 +105,6 @@ fn main() -> Result<()> {
         )
         .get_matches();
 
-    // TODO: validate that this is a dir, here or at config construction level?
     let dir = matches.get_one::<String>("dir").cloned();
     let verbose = matches.get_flag("verbose");
 
@@ -119,6 +118,10 @@ fn main() -> Result<()> {
     }
 
     let config = get_config(ctx);
+
+    if !PathBuf::from(&config.base_dir).is_dir() {
+        bail!(format!("{} is not a dir", config.base_dir))
+    }
 
     if config.verbose {
         println!("[DEBUG] final merged config: {config:?}")
