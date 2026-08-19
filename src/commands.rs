@@ -4,7 +4,8 @@ use tabled::{builder::Builder, settings::Style};
 
 use crate::{
     config::Config,
-    utils::{self, default_group, parse_group_file, stringify_group},
+    group::{self, Group},
+    utils,
 };
 
 pub fn create_group(config: Config, group: &String) -> Result<()> {
@@ -27,7 +28,7 @@ pub fn create_group(config: Config, group: &String) -> Result<()> {
         bail!("Base path '{}' is not a dir", &dir.display());
     }
 
-    let path = utils::group_path(&dir, group)?;
+    let path = group::group_path(&dir, group)?;
 
     if path.exists() {
         bail!(format!("Group '{group}' already exists"));
@@ -51,9 +52,9 @@ pub fn create_group(config: Config, group: &String) -> Result<()> {
         bail!(format!("'{}' is not a directory", parent.display()));
     }
 
-    let default_group = default_group(group.to_owned());
+    let default_group = Group::default(group.to_owned());
 
-    let group_file_str = stringify_group(default_group);
+    let group_file_str = default_group.serialize();
 
     if config.verbose {
         println!("[DEBUG] writing file '{}'", path.to_str().unwrap_or("None"));
@@ -80,7 +81,7 @@ pub fn remove_group(config: Config, group: &String) -> Result<()> {
         bail!("Base path '{}' is not a dir", &dir.display());
     }
 
-    let path = utils::group_path(&dir, group)?;
+    let path = group::group_path(&dir, group)?;
 
     if !path.exists() {
         bail!("Group does not exist");
@@ -103,7 +104,7 @@ pub fn group_info(config: Config, group: &String) -> Result<()> {
     }
 
     let dir = utils::get_base_dir(config.clone());
-    let path = utils::group_path(&dir, group)?;
+    let path = group::group_path(&dir, group)?;
 
     if config.verbose {
         println!("[DEBUG] group path: '{}'", path.to_str().unwrap_or("None"))
@@ -117,7 +118,7 @@ pub fn group_info(config: Config, group: &String) -> Result<()> {
 
     let nix = fs::read_to_string(&path).with_context(|| "Unable to read file")?;
 
-    let group = parse_group_file(group, &nix)?;
+    let group = Group::deserialize(group.to_owned(), &nix)?;
 
     let mut builder = Builder::new();
     builder.push_record(["Name:", &group.name]);
@@ -135,7 +136,7 @@ pub fn group_info(config: Config, group: &String) -> Result<()> {
 }
 
 pub fn list_groups(config: Config) -> Result<()> {
-    let group_names = utils::get_group_names(config)?;
+    let group_names = group::get_group_names(config)?;
 
     let mut builder = Builder::new();
     builder.push_record(["Groups:"]);
@@ -156,7 +157,7 @@ pub fn add_package(config: Config, group: &String, package: &String) -> Result<(
     }
 
     let dir = utils::get_base_dir(config.clone());
-    let path = utils::group_path(&dir, group)?;
+    let path = group::group_path(&dir, group)?;
 
     if config.verbose {
         println!("[DEBUG] group path: '{}'", path.to_str().unwrap_or("None"))
@@ -164,7 +165,7 @@ pub fn add_package(config: Config, group: &String, package: &String) -> Result<(
 
     let nix = fs::read_to_string(&path).with_context(|| "Unable to read file")?;
 
-    let mut group = parse_group_file(group, &nix)?;
+    let mut group = Group::deserialize(group.to_owned(), &nix)?;
 
     if group.packages.contains(package) {
         bail!(format!(
@@ -175,7 +176,7 @@ pub fn add_package(config: Config, group: &String, package: &String) -> Result<(
 
     group.packages.insert(package.to_owned());
 
-    let serialized_group = stringify_group(group);
+    let serialized_group = group.serialize();
 
     fs::write(&path, serialized_group).with_context(|| "Unable to write to file")?;
 
@@ -188,7 +189,7 @@ pub fn remove_package(config: Config, group: &String, package: &String) -> Resul
     }
 
     let dir = utils::get_base_dir(config.clone());
-    let path = utils::group_path(&dir, group)?;
+    let path = group::group_path(&dir, group)?;
 
     if config.verbose {
         println!("[DEBUG] group path: '{}'", path.to_str().unwrap_or("None"))
@@ -196,7 +197,7 @@ pub fn remove_package(config: Config, group: &String, package: &String) -> Resul
 
     let nix = fs::read_to_string(&path).with_context(|| "Unable to read file")?;
 
-    let mut group = parse_group_file(group, &nix)?;
+    let mut group = Group::deserialize(group.to_owned(), &nix)?;
 
     if !group.packages.contains(package) {
         bail!(format!(
@@ -207,7 +208,7 @@ pub fn remove_package(config: Config, group: &String, package: &String) -> Resul
 
     group.packages.remove(package);
 
-    let serialized_group = stringify_group(group);
+    let serialized_group = group.serialize();
 
     fs::write(&path, serialized_group).with_context(|| "Unable to write to file")?;
 

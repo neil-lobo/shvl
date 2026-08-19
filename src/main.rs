@@ -7,6 +7,7 @@ use crate::{config::get_config, utils::CommandContext};
 
 mod commands;
 mod config;
+mod group;
 mod utils;
 
 /// dialoguer hides the terminal cursor while a prompt is on screen and only
@@ -136,7 +137,7 @@ fn main() -> Result<()> {
             let package = submatches
                 .get_one::<String>("package")
                 .expect("package name");
-            let group_names = utils::get_group_names(config.clone())?;
+            let group_names = group::get_group_names(config.clone())?;
 
             let group = if let Some(group) = submatches.get_one::<String>("group") {
                 group
@@ -153,7 +154,7 @@ fn main() -> Result<()> {
             let package = submatches
                 .get_one::<String>("package")
                 .expect("pacakge name");
-            let group_names = utils::get_group_names(config.clone())?;
+            let group_names = group::get_group_names(config.clone())?;
 
             let group = if let Some(group) = submatches.get_one::<String>("group") {
                 group
