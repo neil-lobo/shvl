@@ -82,7 +82,6 @@ impl Group {
         Ok(out)
     }
 
-    // TODO: tabs vs 4 spaces for indents? (configurable)
     pub fn serialize(self) -> String {
         let mut out = String::new();
 
