@@ -1,7 +1,7 @@
-use std::println;
-
+use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgAction, Command};
 use dialoguer::{FuzzySelect, console::Term};
+use std::println;
 
 use crate::{config::get_config, utils::CommandContext};
 
@@ -34,21 +34,21 @@ fn restore_cursor_on_sigint() {
 }
 
 /// Prompts the user to pick a group from `group_names`.
-fn select_group(group_names: &[String]) -> Result<&String, String> {
+fn select_group(group_names: &[String]) -> Result<&String> {
     restore_cursor_on_sigint();
 
     let selection = FuzzySelect::new()
         .with_prompt("Type to filter groups")
         .items(group_names)
         .interact()
-        .or(Err("unable to create fuzzy menu"))?;
+        .with_context(|| "Unable to create fuzzy menu")?;
 
     group_names
         .get(selection)
-        .ok_or("invalid group selection".to_owned())
+        .with_context(|| "Invalid group selection")
 }
 
-fn main() -> Result<(), String> {
+fn main() -> Result<()> {
     let group_arg = Arg::new("group")
         .short('g')
         .long("group")
@@ -105,6 +105,7 @@ fn main() -> Result<(), String> {
         )
         .get_matches();
 
+    // TODO: validate that this is a dir, here or at config construction level?
     let dir = matches.get_one::<String>("dir").cloned();
     let verbose = matches.get_flag("verbose");
 
@@ -123,11 +124,9 @@ fn main() -> Result<(), String> {
         println!("[DEBUG] final merged config: {config:?}")
     }
 
-    if matches.subcommand().is_none() {
-        return Err("Unreachable".to_owned());
-    }
-
-    let (name, submatches) = matches.subcommand().unwrap();
+    let (name, submatches) = matches
+        .subcommand()
+        .with_context(|| "Error getting submatches")?;
 
     match name {
         "add" => {
@@ -165,13 +164,11 @@ fn main() -> Result<(), String> {
             Ok(())
         }
         "group" => {
-            if submatches.subcommand().is_none() {
-                return Err("Unreachale".to_owned());
-            }
+            let (name, submatches) = submatches
+                .subcommand()
+                .with_context(|| "Error getting submatches")?;
 
-            let (name, submatches) = submatches.subcommand().unwrap();
-
-            match name {
+            let group_res: Result<()> = match name {
                 "create" => {
                     let group = submatches.get_one::<String>("group").unwrap();
 
@@ -190,13 +187,11 @@ fn main() -> Result<(), String> {
                     Ok(())
                 }
                 "list" => commands::list_groups(config.clone()),
-                _ => Err("Unreachable".to_owned()),
-            }?;
+                _ => bail!("Invalid group command"),
+            };
 
-            Ok(())
+            group_res
         }
-        _ => Err("Unreachable".to_owned()),
-    }?;
-
-    Ok(())
+        _ => bail!("Invalid command"),
+    }
 }

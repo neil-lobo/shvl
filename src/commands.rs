@@ -1,3 +1,4 @@
+use anyhow::{Context, Result, bail};
 use std::{fs, println};
 use tabled::{builder::Builder, settings::Style};
 
@@ -6,33 +7,34 @@ use crate::{
     utils::{self, default_group, parse_group_file, stringify_group},
 };
 
-pub fn create_group(config: Config, group: &String) -> Result<(), String> {
+pub fn create_group(config: Config, group: &String) -> Result<()> {
     if config.verbose {
         println!("[DEBUG] creating group '{group}'");
     }
 
-    let dir = utils::get_base_dir(config.clone())?;
+    let dir = utils::get_base_dir(config.clone());
 
     if dir.is_file() {
-        return Err("file named '.shvl' found".to_string());
+        bail!("Conflicting file named '.shvl' found");
     }
 
     if !dir.exists() {
-        fs::create_dir_all(&dir).or(Err(format!("Unable to create dir: {}", &dir.display())))?;
+        fs::create_dir_all(&dir)
+            .with_context(|| format!("Unable to create dir: {}", &dir.display()))?;
     }
 
     if !dir.is_dir() {
-        return Err("unable to find .shvl dir".to_string());
+        bail!("Base path '{}' is not a dir", &dir.display());
     }
 
     let path = utils::group_path(&dir, group)?;
 
     if path.exists() {
-        return Err(format!("group '{group}' already exists"));
+        bail!(format!("Group '{group}' already exists"));
     }
 
     // create any subdirectories the group name asks for
-    let parent = path.parent().ok_or("invalid group path")?;
+    let parent = path.parent().with_context(|| "Invalid group path")?;
     if !parent.exists() {
         if config.verbose {
             println!(
@@ -42,53 +44,50 @@ pub fn create_group(config: Config, group: &String) -> Result<(), String> {
         }
 
         fs::create_dir_all(parent)
-            .or(Err(format!("Unable to create dir: {}", parent.display())))?;
+            .with_context(|| format!("Unable to create dir: {}", parent.display()))?;
     }
 
     if !parent.is_dir() {
-        return Err(format!("'{}' is not a directory", parent.display()));
+        bail!(format!("'{}' is not a directory", parent.display()));
     }
 
     let default_group = default_group(group.to_owned());
 
-    let group_file_str = stringify_group(default_group)?;
+    let group_file_str = stringify_group(default_group);
 
     if config.verbose {
         println!("[DEBUG] writing file '{}'", path.to_str().unwrap_or("None"));
     }
 
     fs::write(&path, group_file_str)
-        .or(Err(format!("Unable to write to file: {}", &path.display())))?;
+        .with_context(|| format!("Unable to write to file: {}", &path.display()))?;
 
     Ok(())
 }
 
-pub fn remove_group(config: Config, group: &String) -> Result<(), String> {
+pub fn remove_group(config: Config, group: &String) -> Result<()> {
     if config.verbose {
         println!("[DEBUG] removing group '{group}'")
     }
 
-    let dir = utils::get_base_dir(config)?;
+    let dir = utils::get_base_dir(config);
 
     if dir.is_file() {
-        return Err("file named '.shvl' found".to_owned());
-    }
-
-    if !dir.exists() {
-        return Err(".shvl dir not found".to_owned());
+        bail!("Conflicting file named '.shvl' found");
     }
 
     if !dir.is_dir() {
-        return Err("unable to find .shvl dir".to_owned());
+        bail!("Base path '{}' is not a dir", &dir.display());
     }
 
     let path = utils::group_path(&dir, group)?;
 
     if !path.exists() {
-        return Err("group does not exist".to_owned());
+        bail!("Group does not exist");
     }
 
-    fs::remove_file(&path).or(Err(format!("Unable to remove file: {}", &path.display())))?;
+    fs::remove_file(&path)
+        .with_context(|| format!("Unable to remove file: {}", &path.display()))?;
 
     // clean up any subdirectories left empty by the removal
     if let Some(parent) = path.parent() {
@@ -98,25 +97,25 @@ pub fn remove_group(config: Config, group: &String) -> Result<(), String> {
     Ok(())
 }
 
-pub fn group_info(config: Config, group: &String) -> Result<(), String> {
+pub fn group_info(config: Config, group: &String) -> Result<()> {
     if config.verbose {
         println!("[DEBUG] getting info for group '{group}'");
     }
 
-    let dir = utils::get_base_dir(config.clone())?;
+    let dir = utils::get_base_dir(config.clone());
     let path = utils::group_path(&dir, group)?;
 
     if config.verbose {
         println!("[DEBUG] group path: '{}'", path.to_str().unwrap_or("None"))
     }
 
-    let exists = fs::exists(&path).or(Err("Unable to find group file"))?;
+    let exists = fs::exists(&path).with_context(|| "Unable to find group file")?;
 
     if !exists {
-        return Err("Group does not exist".to_owned());
+        bail!("Group does not exist");
     }
 
-    let nix = fs::read_to_string(&path).or(Err("Unable to read file"))?;
+    let nix = fs::read_to_string(&path).with_context(|| "Unable to read file")?;
 
     let group = parse_group_file(group, &nix)?;
 
@@ -135,7 +134,7 @@ pub fn group_info(config: Config, group: &String) -> Result<(), String> {
     Ok(())
 }
 
-pub fn list_groups(config: Config) -> Result<(), String> {
+pub fn list_groups(config: Config) -> Result<()> {
     let group_names = utils::get_group_names(config)?;
 
     let mut builder = Builder::new();
@@ -151,54 +150,54 @@ pub fn list_groups(config: Config) -> Result<(), String> {
     Ok(())
 }
 
-pub fn add_package(config: Config, group: &String, package: &String) -> Result<(), String> {
+pub fn add_package(config: Config, group: &String, package: &String) -> Result<()> {
     if config.verbose {
         println!("[DEBUG] adding package '{package}' to group '{group}'")
     }
 
-    let dir = utils::get_base_dir(config.clone())?;
+    let dir = utils::get_base_dir(config.clone());
     let path = utils::group_path(&dir, group)?;
 
     if config.verbose {
         println!("[DEBUG] group path: '{}'", path.to_str().unwrap_or("None"))
     }
 
-    let nix = fs::read_to_string(&path).or(Err("Unable to read file"))?;
+    let nix = fs::read_to_string(&path).with_context(|| "Unable to read file")?;
 
     let mut group = parse_group_file(group, &nix)?;
 
     // TODO: custom insert method that errors if entry already exists
     group.packages.insert(package.to_owned());
 
-    let serialized_group = stringify_group(group)?;
+    let serialized_group = stringify_group(group);
 
-    fs::write(&path, serialized_group).or(Err("Unable to write to file"))?;
+    fs::write(&path, serialized_group).with_context(|| "Unable to write to file")?;
 
     Ok(())
 }
 
-pub fn remove_package(config: Config, group: &String, package: &String) -> Result<(), String> {
+pub fn remove_package(config: Config, group: &String, package: &String) -> Result<()> {
     if config.verbose {
         println!("[DEBUG] removing package '{package}' to group '{group}'")
     }
 
-    let dir = utils::get_base_dir(config.clone())?;
+    let dir = utils::get_base_dir(config.clone());
     let path = utils::group_path(&dir, group)?;
 
     if config.verbose {
         println!("[DEBUG] group path: '{}'", path.to_str().unwrap_or("None"))
     }
 
-    let nix = fs::read_to_string(&path).or(Err("Unable to read file"))?;
+    let nix = fs::read_to_string(&path).with_context(|| "Unable to read file")?;
 
     let mut group = parse_group_file(group, &nix)?;
 
     // TODO: custom remove method that errors if entry does not exist
     group.packages.remove(package);
 
-    let serialized_group = stringify_group(group)?;
+    let serialized_group = stringify_group(group);
 
-    fs::write(&path, serialized_group).or(Err("Unable to write to file"))?;
+    fs::write(&path, serialized_group).with_context(|| "Unable to write to file")?;
 
     Ok(())
 }

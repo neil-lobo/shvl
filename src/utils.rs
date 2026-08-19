@@ -1,6 +1,6 @@
+use anyhow::{Context, Result, bail};
 use rnix::ast::Expr;
 use std::collections::BTreeSet;
-use std::println;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -23,45 +23,45 @@ pub struct CommandContext {
 /// Validates a group name. Group names are `/` separated paths relative to the
 /// `.shvl` dir, where the final segment names the `.nix` file and any preceding
 /// segments name subdirectories.
-pub fn validate_group_name(group: &str) -> Result<(), String> {
+pub fn validate_group_name(group: &str) -> Result<()> {
     if group.is_empty() {
-        return Err("group name cannot be empty".to_owned());
+        bail!("Group name cannot be empty");
     }
 
     if group.starts_with('/') {
-        return Err("group name cannot start with '/'".to_owned());
+        bail!("Group name cannot start with '/'");
     }
 
     if group.ends_with('/') {
-        return Err("group name cannot end with '/'".to_owned());
+        bail!("Group name cannot end with '/'");
     }
 
     for segment in group.split('/') {
         if segment.is_empty() {
-            return Err(format!("group name '{group}' contains an empty segment"));
+            bail!(format!("Group name '{group}' contains an empty segment"));
         }
 
         if segment == "." || segment == ".." {
-            return Err(format!(
-                "group name '{group}' contains a '.' or '..' segment"
+            bail!(format!(
+                "Group name '{group}' contains a '.' or '..' segment"
             ));
         }
 
         if segment.starts_with('.') {
-            return Err(format!(
-                "group name segment '{segment}' cannot start with '.'"
+            bail!(format!(
+                "Group name segment '{segment}' cannot start with '.'"
             ));
         }
 
         if segment.contains('\\') {
-            return Err(format!(
-                "group name segment '{segment}' cannot contain '\\'"
+            bail!(format!(
+                "Group name segment '{segment}' cannot contain '\\'"
             ));
         }
 
         if segment.contains(|c: char| c.is_control()) {
-            return Err(format!(
-                "group name segment '{segment}' cannot contain control characters"
+            bail!(format!(
+                "Group name segment '{segment}' cannot contain control characters"
             ));
         }
     }
@@ -70,8 +70,8 @@ pub fn validate_group_name(group: &str) -> Result<(), String> {
 }
 
 /// Resolves a group name to the path of its `.nix` file inside `base`.
-pub fn group_path(base: &Path, group: &str) -> Result<PathBuf, String> {
-    validate_group_name(group)?;
+pub fn group_path(base: &Path, group: &str) -> Result<PathBuf> {
+    validate_group_name(group).context("Invalid group name")?;
 
     let mut path = base.to_path_buf();
 
@@ -87,51 +87,47 @@ pub fn group_path(base: &Path, group: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-pub fn get_base_dir(config: Config) -> Result<PathBuf, String> {
-    Ok(PathBuf::from(config.base_dir))
+pub fn get_base_dir(config: Config) -> PathBuf {
+    PathBuf::from(config.base_dir)
 }
 
 // TODO: move to group file? rename to deserialize?
-pub fn parse_group_file(group: &String, file_content: &String) -> Result<Group, String> {
+pub fn parse_group_file(group: &String, file_content: &String) -> Result<Group> {
     let parse = rnix::Root::parse(file_content);
 
     let root = parse
         .ok()
-        .or(Err("Error parsing nix file"))?
+        .with_context(|| "Unable to parse nix file")?
         .expr()
-        .ok_or("Error parsing nix file")?;
+        .with_context(|| "Unable to parse nix file")?;
 
-    let lambda = match root {
-        Expr::Lambda(l) => Ok(l),
-        _ => Err("not a lambda"),
-    }?;
+    let Expr::Lambda(lambda) = root else {
+        bail!("Root expr is not a lambda");
+    };
 
-    let _param = lambda.param().ok_or("lambda has no param")?;
+    let _param = lambda.param().context("Lambda has no param expr")?;
 
     // TODO: ensure param is a single ident, and track its name
 
-    let lambda_body = lambda.body().ok_or("lambda has no body")?;
+    let lambda_body = lambda.body().context("Lambda has no body expr")?;
 
-    let paren = match lambda_body {
-        Expr::Paren(p) => Ok(p),
-        _ => Err("not a paren"),
-    }?;
+    let Expr::Paren(paren) = lambda_body else {
+        bail!("Lambda body does not start with a paren expr");
+    };
 
-    let paren_expr = paren.expr().ok_or("paren has no body expr")?;
+    let paren_expr = paren.expr().context("Paren has no body expr")?;
 
-    let with = match paren_expr {
-        Expr::With(w) => Ok(w),
-        _ => Err("not a with"),
-    }?;
+    let Expr::With(with) = paren_expr else {
+        bail!("Paren body expr does not start with a with expr");
+    };
 
     // TODO: check that with ident matches the lambda param
 
-    let with_body = with.body().ok_or("with has no body expr")?;
+    let with_body = with.body().context("With expr has no body expr")?;
 
-    let list = match with_body {
-        Expr::List(l) => Ok(l),
-        _ => Err("with body is not a list"),
-    }?;
+    let Expr::List(list) = with_body else {
+        bail!("With body expr is not a list expr");
+    };
 
     let mut out = Group {
         name: group.to_owned(),
@@ -154,7 +150,7 @@ pub fn parse_group_file(group: &String, file_content: &String) -> Result<Group, 
                 out.packages.insert(format!("{}.{}", expr, attr_path));
             }
             _ => {
-                println!("not ident or select");
+                bail!("List expr contains a non ident or select expr");
             }
         }
     }
@@ -164,7 +160,7 @@ pub fn parse_group_file(group: &String, file_content: &String) -> Result<Group, 
 
 // TODO: same comment as `parse_group_file`
 // TODO: tabs vs 4 spaces for indents? (configurable)
-pub fn stringify_group(group: Group) -> Result<String, String> {
+pub fn stringify_group(group: Group) -> String {
     let mut out = String::new();
 
     out.push_str(
@@ -185,7 +181,7 @@ pub fn stringify_group(group: Group) -> Result<String, String> {
     out.push_str("\t]\n");
     out.push_str(")\n");
 
-    Ok(out)
+    out
 }
 
 // TODO: move to Group impl of Default trait?
@@ -196,12 +192,8 @@ pub fn default_group(name: String) -> Group {
     }
 }
 
-pub fn get_group_names(config: Config) -> Result<Vec<String>, String> {
-    let dir = get_base_dir(config)?;
-
-    if !dir.is_dir() {
-        return Err("no groups found".to_string());
-    }
+pub fn get_group_names(config: Config) -> Result<Vec<String>> {
+    let dir = get_base_dir(config);
 
     let mut out = collect_group_names(&dir, "")?;
 
@@ -212,18 +204,18 @@ pub fn get_group_names(config: Config) -> Result<Vec<String>, String> {
 
 /// Recursively walks `dir`, returning every `.nix` file it finds as a `/`
 /// separated group name relative to the `.shvl` root.
-fn collect_group_names(dir: &Path, prefix: &str) -> Result<Vec<String>, String> {
+fn collect_group_names(dir: &Path, prefix: &str) -> Result<Vec<String>> {
     let mut out: Vec<String> = Vec::new();
 
-    let entries = fs::read_dir(dir).or(Err("unable to read .shvl dir".to_string()))?;
+    let entries = fs::read_dir(dir).with_context(|| "Unable to read shvl base dir")?;
 
     for entry in entries {
-        let entry = entry.or(Err("unable to read dir entry"))?;
+        let entry = entry.with_context(|| "Unable to read dir entry")?;
 
         let file_name = entry
             .file_name()
             .to_str()
-            .ok_or("unable to read file name".to_string())?
+            .with_context(|| "Unable to read file name")?
             .to_string();
 
         // skip hidden entries, they can never be valid group name segments
@@ -231,7 +223,9 @@ fn collect_group_names(dir: &Path, prefix: &str) -> Result<Vec<String>, String> 
             continue;
         }
 
-        let file_type = entry.file_type().or(Err("unable to read file type"))?;
+        let file_type = entry
+            .file_type()
+            .with_context(|| "Unable to read file type")?;
 
         if file_type.is_dir() {
             let nested_prefix = if prefix.is_empty() {
@@ -264,12 +258,12 @@ fn collect_group_names(dir: &Path, prefix: &str) -> Result<Vec<String>, String> 
 
 /// Removes now empty directories starting at `dir` and walking up towards
 /// `base`. `base` itself is never removed.
-pub fn prune_empty_dirs(base: &Path, dir: &Path) -> Result<(), String> {
+pub fn prune_empty_dirs(base: &Path, dir: &Path) -> Result<()> {
     let mut current = dir.to_path_buf();
 
     while current.starts_with(base) && current != *base {
         let is_empty = fs::read_dir(&current)
-            .or(Err(format!("unable to read dir: {}", current.display())))?
+            .with_context(|| format!("Unable to read dir: {}", current.display()))?
             .next()
             .is_none();
 
@@ -277,10 +271,8 @@ pub fn prune_empty_dirs(base: &Path, dir: &Path) -> Result<(), String> {
             break;
         }
 
-        fs::remove_dir(&current).or(Err(format!(
-            "unable to remove empty dir: {}",
-            current.display()
-        )))?;
+        fs::remove_dir(&current)
+            .with_context(|| format!("Unable to remove empty dir: {}", current.display()))?;
 
         if !current.pop() {
             break;
