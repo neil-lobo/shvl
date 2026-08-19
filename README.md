@@ -75,33 +75,9 @@ nix build            # flakes
 nix-build            # without flakes
 ```
 
-### As a flake input
+### Cachix Cache
 
-Exposes `packages.<system>.default` for `x86_64-linux` and `aarch64-linux`.
-
-```nix
-{
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    shvl.url = "github:<owner>/shvl";
-    shvl.inputs.nixpkgs.follows = "nixpkgs";
-  };
-
-  outputs =
-    { nixpkgs, shvl, ... }:
-    {
-      nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        modules = [
-          ./configuration.nix
-          ({ pkgs, ... }: {
-            environment.systemPackages = [ shvl.packages.${pkgs.system}.default ];
-          })
-        ];
-      };
-    };
-}
-```
+https://app.cachix.org/cache/shvl
 
 ## Group files
 
