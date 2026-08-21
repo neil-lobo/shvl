@@ -8,8 +8,9 @@ use crate::config::Config;
 
 #[derive(Clone, Debug)]
 pub struct CommandContext {
-    pub dir_flag: Option<String>,
-    pub verbose_log: bool,
+    pub base_dir: Option<String>,
+    pub verbose_log: Option<bool>,
+    pub config_path: Option<String>,
 }
 
 pub fn get_base_dir(config: Config) -> PathBuf {

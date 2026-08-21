@@ -98,6 +98,11 @@ fn main() -> Result<()> {
         )
         .arg(Arg::new("dir").help("Set base dir").short('d').long("dir"))
         .arg(
+            Arg::new("config_path")
+                .help("Set config file path")
+                .long("config"),
+        )
+        .arg(
             Arg::new("verbose")
                 .help("Enable verbose logs")
                 .short('v')
@@ -106,15 +111,21 @@ fn main() -> Result<()> {
         )
         .get_matches();
 
-    let dir = matches.get_one::<String>("dir").cloned();
-    let verbose = matches.get_flag("verbose");
-
-    let ctx: CommandContext = CommandContext {
-        dir_flag: dir,
-        verbose_log: verbose,
+    let base_dir = matches.get_one::<String>("dir").cloned();
+    let config_path = matches.get_one::<String>("config").cloned();
+    let verbose_log = if matches.get_flag("verbose") == false {
+        None
+    } else {
+        Some(true)
     };
 
-    if ctx.verbose_log {
+    let ctx: CommandContext = CommandContext {
+        base_dir,
+        config_path,
+        verbose_log,
+    };
+
+    if ctx.verbose_log == Some(true) {
         println!("[DEBUG] command context: {ctx:?}");
     }
 
