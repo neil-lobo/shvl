@@ -41,3 +41,54 @@ pub fn prune_empty_dirs(base: &Path, dir: &Path) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod get_base_dir {
+        use super::*;
+
+        #[test]
+        fn basic() {
+            let temp_dir = tempfile::tempdir().unwrap();
+
+            let config = Config {
+                base_dir: temp_dir.path().to_str().unwrap().to_owned(),
+                verbose: false,
+            };
+
+            let path = get_base_dir(config);
+
+            assert!(path.exists());
+            assert!(path.is_dir());
+        }
+    }
+
+    mod prune_empty_dirs {
+        use super::*;
+
+        #[test]
+        fn basic() {
+            let base = tempfile::tempdir().unwrap();
+            let mut path = base.path().to_path_buf();
+
+            let dirs = ["foo", "bar", "fizz", "buzz"];
+
+            for dir in dirs {
+                path.push(dir);
+                fs::create_dir(path.join(path.to_owned())).unwrap();
+                assert!(path.exists());
+                assert!(path.is_dir());
+            }
+
+            prune_empty_dirs(base.path(), path.as_path()).unwrap();
+
+            for _ in 0..dirs.len() - 1 {
+                path.pop();
+
+                assert!(!path.exists());
+            }
+        }
+    }
+}
