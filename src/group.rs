@@ -244,3 +244,462 @@ fn collect_group_names(dir: &Path, prefix: &str) -> Result<Vec<String>> {
 
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn group_from(nix: &str) -> Result<Group> {
+        Group::deserialize("test".to_owned(), &nix.to_owned())
+    }
+
+    fn packages_of(nix: &str) -> Vec<String> {
+        group_from(nix).unwrap().packages.into_iter().collect()
+    }
+
+    fn group_of(name: &str, packages: &[&str]) -> Group {
+        Group {
+            name: name.to_owned(),
+            packages: packages.iter().map(|p| (*p).to_owned()).collect(),
+        }
+    }
+
+    fn setup() -> (TempDir, Config) {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let config = Config {
+            base_dir: temp_dir.path().to_str().unwrap().to_owned(),
+            verbose: false,
+        };
+
+        (temp_dir, config)
+    }
+
+    fn touch(path: &Path) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+
+        fs::write(path, "").unwrap();
+    }
+
+    mod deserialize {
+        use super::*;
+
+        #[test]
+        fn basic() {
+            let packages =
+                packages_of("pkgs:\n(\n\twith pkgs;\n\t[\n\t\tripgrep\n\t\tfd\n\t]\n)\n");
+
+            assert!(packages == vec!["fd".to_owned(), "ripgrep".to_owned()]);
+        }
+
+        #[test]
+        fn name_is_taken_from_argument() {
+            let group = group_from("pkgs:\n(\n\twith pkgs;\n\t[\n\t]\n)\n").unwrap();
+
+            assert!(group.name == "test");
+        }
+
+        #[test]
+        fn empty_list() {
+            let group = group_from("pkgs:\n(\n\twith pkgs;\n\t[\n\t]\n)\n").unwrap();
+
+            assert!(group.packages.is_empty());
+        }
+
+        #[test]
+        fn select_expr() {
+            let packages =
+                packages_of("pkgs:\n(\n\twith pkgs;\n\t[\n\t\tnodePackages.prettier\n\t]\n)\n");
+
+            assert!(packages == vec!["nodePackages.prettier".to_owned()]);
+        }
+
+        #[test]
+        fn nested_select_expr() {
+            let packages = packages_of("pkgs:\n(\n\twith pkgs;\n\t[\n\t\tfoo.bar.baz\n\t]\n)\n");
+
+            assert!(packages == vec!["foo.bar.baz".to_owned()]);
+        }
+
+        #[test]
+        fn duplicates_collapse() {
+            let packages = packages_of("pkgs:\n(\n\twith pkgs;\n\t[\n\t\tfoo\n\t\tfoo\n\t]\n)\n");
+
+            assert!(packages == vec!["foo".to_owned()]);
+        }
+
+        #[test]
+        fn ignores_comments_and_layout() {
+            let packages =
+                packages_of("# a comment\npkgs: ( with pkgs; [ ripgrep /* inline */ fd ] )\n");
+
+            assert!(packages == vec!["fd".to_owned(), "ripgrep".to_owned()]);
+        }
+
+        #[test]
+        fn param_name_need_not_be_pkgs() {
+            let packages = packages_of("p:\n(\n\twith p;\n\t[\n\t\tfoo\n\t]\n)\n");
+
+            assert!(packages == vec!["foo".to_owned()]);
+        }
+
+        #[test]
+        fn empty_file() {
+            let err = group_from("").unwrap_err();
+
+            assert!(err.to_string() == "Unable to parse nix file");
+        }
+
+        #[test]
+        fn invalid_syntax() {
+            let err = group_from("pkgs: ( with pkgs; [").unwrap_err();
+
+            assert!(err.to_string() == "Unable to parse nix file");
+        }
+
+        #[test]
+        fn root_not_lambda() {
+            let err = group_from("[ foo ]").unwrap_err();
+
+            assert!(err.to_string() == "Root expr is not a lambda");
+        }
+
+        #[test]
+        fn body_not_paren() {
+            let err = group_from("pkgs: [ foo ]").unwrap_err();
+
+            assert!(err.to_string() == "Lambda body does not start with a paren expr");
+        }
+
+        #[test]
+        fn paren_not_with() {
+            let err = group_from("pkgs: (\n[ foo ]\n)").unwrap_err();
+
+            assert!(err.to_string() == "Paren body expr does not start with a with expr");
+        }
+
+        #[test]
+        fn with_body_not_list() {
+            let err = group_from("pkgs: (\nwith pkgs;\nfoo\n)").unwrap_err();
+
+            assert!(err.to_string() == "With body expr is not a list expr");
+        }
+
+        #[test]
+        fn list_item_not_ident_or_select() {
+            for src in [
+                "pkgs: (\nwith pkgs;\n[ 123 ]\n)",
+                "pkgs: (\nwith pkgs;\n[ \"foo\" ]\n)",
+            ] {
+                let err = group_from(src).unwrap_err();
+
+                assert!(err.to_string() == "List expr contains a non ident or select expr");
+            }
+        }
+    }
+
+    mod serialize {
+        use super::*;
+
+        #[test]
+        fn basic() {
+            let nix = group_of("test", &["ripgrep", "fd"]).serialize();
+
+            assert!(nix.starts_with("# This file is autogenerate by shvl."));
+            assert!(nix.contains("pkgs:\n"));
+            assert!(nix.contains("\twith pkgs;\n"));
+            assert!(nix.contains("\t\tfd\n\t\tripgrep\n"));
+        }
+
+        #[test]
+        fn empty_group() {
+            let nix = Group::default("test".to_owned()).serialize();
+
+            assert!(nix.contains("\t[\n\t]\n"));
+        }
+
+        #[test]
+        fn name_is_not_written_to_file() {
+            let nix = group_of("some-unique-group-name", &[]).serialize();
+
+            assert!(!nix.contains("some-unique-group-name"));
+        }
+
+        #[test]
+        fn round_trip() {
+            let packages = ["ripgrep", "fd", "nodePackages.prettier", "foo-bar", "_x'y"];
+
+            let nix = group_of("test", &packages).serialize();
+
+            let group = Group::deserialize("test".to_owned(), &nix).unwrap();
+
+            let mut expected: Vec<String> = packages.iter().map(|p| (*p).to_owned()).collect();
+            expected.sort();
+
+            assert!(group.packages.into_iter().collect::<Vec<_>>() == expected);
+        }
+
+        #[test]
+        fn round_trip_empty() {
+            let nix = Group::default("test".to_owned()).serialize();
+
+            let group = Group::deserialize("test".to_owned(), &nix).unwrap();
+
+            assert!(group.packages.is_empty());
+        }
+
+        #[test]
+        fn round_trip_is_lossy_for_non_ident_names() {
+            let nix = group_of("test", &["foo bar"]).serialize();
+            let group = Group::deserialize("test".to_owned(), &nix).unwrap();
+            assert!(group.packages.into_iter().collect::<Vec<_>>() == vec!["bar", "foo"]);
+
+            let nix = group_of("test", &[""]).serialize();
+            assert!(
+                Group::deserialize("test".to_owned(), &nix)
+                    .unwrap()
+                    .packages
+                    .is_empty()
+            );
+
+            let nix = group_of("test", &["foo;"]).serialize();
+            assert!(Group::deserialize("test".to_owned(), &nix).is_err());
+
+            let nix = group_of("test", &["1abc"]).serialize();
+            assert!(Group::deserialize("test".to_owned(), &nix).is_err());
+        }
+    }
+
+    mod validate_group_name {
+        use super::*;
+
+        #[test]
+        fn valid_names() {
+            for name in [
+                "foo",
+                "foo/bar",
+                "foo/bar/fizz",
+                "foo-bar",
+                "foo_bar",
+                "foo.bar",
+                "a",
+                "foo..bar",
+            ] {
+                assert!(validate_group_name(name).is_ok(), "expected ok: {name}");
+            }
+        }
+
+        #[test]
+        fn empty() {
+            let err = validate_group_name("").unwrap_err();
+
+            assert!(err.to_string() == "Group name cannot be empty");
+        }
+
+        #[test]
+        fn leading_slash() {
+            let err = validate_group_name("/foo").unwrap_err();
+
+            assert!(err.to_string() == "Group name cannot start with '/'");
+        }
+
+        #[test]
+        fn trailing_slash() {
+            let err = validate_group_name("foo/").unwrap_err();
+
+            assert!(err.to_string() == "Group name cannot end with '/'");
+        }
+
+        #[test]
+        fn empty_segment() {
+            let err = validate_group_name("foo//bar").unwrap_err();
+
+            assert!(err.to_string() == "Group name 'foo//bar' contains an empty segment");
+        }
+
+        #[test]
+        fn dot_segments() {
+            for name in [
+                ".",
+                "..",
+                "../foo",
+                "foo/..",
+                "foo/../bar",
+                "./foo",
+                "foo/.",
+            ] {
+                assert!(validate_group_name(name).is_err(), "expected err: {name}");
+            }
+        }
+
+        #[test]
+        fn hidden_segment() {
+            let err = validate_group_name("foo/.bar").unwrap_err();
+
+            assert!(err.to_string() == "Group name segment '.bar' cannot start with '.'");
+        }
+
+        #[test]
+        fn backslash() {
+            let err = validate_group_name("foo\\bar").unwrap_err();
+
+            assert!(err.to_string() == "Group name segment 'foo\\bar' cannot contain '\\'");
+        }
+
+        #[test]
+        fn control_characters() {
+            for name in ["foo\nbar", "foo\tbar", "foo\0bar"] {
+                assert!(validate_group_name(name).is_err(), "expected err: {name:?}");
+            }
+        }
+    }
+
+    mod group_path {
+        use super::*;
+
+        #[test]
+        fn basic() {
+            let path = group_path(Path::new("/base"), "foo").unwrap();
+
+            assert!(path == PathBuf::from("/base/foo.nix"));
+        }
+
+        #[test]
+        fn nested() {
+            let path = group_path(Path::new("/base"), "foo/bar/fizz").unwrap();
+
+            assert!(path == PathBuf::from("/base/foo/bar/fizz.nix"));
+        }
+
+        #[test]
+        fn invalid_name_is_rejected() {
+            for name in ["", "/foo", "foo/", "foo//bar", "../foo", ".foo"] {
+                assert!(
+                    group_path(Path::new("/base"), name).is_err(),
+                    "expected err: {name}"
+                );
+            }
+        }
+
+        #[test]
+        fn stays_within_base() {
+            let path = group_path(Path::new("/base"), "foo/bar").unwrap();
+
+            assert!(path.starts_with("/base"));
+        }
+    }
+
+    mod get_group_names {
+        use super::*;
+
+        #[test]
+        fn empty_dir() {
+            let (_temp_dir, config) = setup();
+
+            assert!(get_group_names(config).unwrap().is_empty());
+        }
+
+        #[test]
+        fn sorted_and_nested() {
+            let (temp_dir, config) = setup();
+            let base = temp_dir.path();
+
+            touch(&base.join("foo.nix"));
+            touch(&base.join("bar.nix"));
+            touch(&base.join("nested/fizz.nix"));
+            touch(&base.join("nested/deeper/buzz.nix"));
+
+            let names = get_group_names(config).unwrap();
+
+            assert!(
+                names
+                    == vec![
+                        "bar".to_owned(),
+                        "foo".to_owned(),
+                        "nested/deeper/buzz".to_owned(),
+                        "nested/fizz".to_owned(),
+                    ]
+            );
+        }
+
+        #[test]
+        fn names_round_trip_through_group_path() {
+            let (temp_dir, config) = setup();
+            let base = temp_dir.path();
+
+            touch(&base.join("foo.nix"));
+            touch(&base.join("nested/deeper/buzz.nix"));
+
+            for name in get_group_names(config.clone()).unwrap() {
+                let path = group_path(base, &name).unwrap();
+
+                assert!(path.is_file(), "expected file for group: {name}");
+            }
+        }
+
+        #[test]
+        fn skips_non_nix_files() {
+            let (temp_dir, config) = setup();
+            let base = temp_dir.path();
+
+            touch(&base.join("foo.nix"));
+            touch(&base.join("README.md"));
+            touch(&base.join("notnix"));
+            touch(&base.join("foo.nix.bak"));
+
+            assert!(get_group_names(config).unwrap() == vec!["foo".to_owned()]);
+        }
+
+        #[test]
+        fn skips_hidden_entries() {
+            let (temp_dir, config) = setup();
+            let base = temp_dir.path();
+
+            touch(&base.join("foo.nix"));
+            touch(&base.join(".hidden.nix"));
+            touch(&base.join(".git/config.nix"));
+
+            assert!(get_group_names(config).unwrap() == vec!["foo".to_owned()]);
+        }
+
+        #[test]
+        fn skips_bare_nix_suffix_file() {
+            let (temp_dir, config) = setup();
+
+            touch(&temp_dir.path().join(".nix"));
+
+            assert!(get_group_names(config).unwrap().is_empty());
+        }
+
+        #[test]
+        fn empty_subdirs_contribute_nothing() {
+            let (temp_dir, config) = setup();
+
+            fs::create_dir_all(temp_dir.path().join("empty/deeper")).unwrap();
+
+            assert!(get_group_names(config).unwrap().is_empty());
+        }
+
+        #[test]
+        fn missing_base_dir_errors() {
+            let temp_dir = tempfile::tempdir().unwrap();
+
+            let config = Config {
+                base_dir: temp_dir
+                    .path()
+                    .join("does-not-exist")
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+                verbose: false,
+            };
+
+            let err = get_group_names(config).unwrap_err();
+
+            assert!(err.to_string() == "Unable to read shvl base dir");
+        }
+    }
+}
