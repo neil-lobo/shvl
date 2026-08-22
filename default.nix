@@ -9,4 +9,11 @@ pkgs.rustPlatform.buildRustPackage rec {
   version = cargoToml.package.version;
   cargoLock.lockFile = ./Cargo.lock;
   src = pkgs.lib.cleanSource ./.;
+
+  nativeBuildInputs = [ pkgs.installShellFiles ];
+
+  postInstall = pkgs.lib.optionalString (pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform) ''
+    installShellCompletion --cmd shvl \
+      --bash <($out/bin/shvl completion bash)
+  '';
 }

@@ -1,10 +1,11 @@
 use anyhow::{Context, Result, bail};
-use clap::{Arg, ArgAction, Command};
+use clap_complete::{Shell, generate};
 use dialoguer::{FuzzySelect, console::Term};
-use std::{path::PathBuf, println};
+use std::{io, path::PathBuf, println};
 
 use crate::{config::get_config, utils::CommandContext};
 
+mod cli;
 mod commands;
 mod config;
 mod group;
@@ -49,67 +50,22 @@ fn select_group(group_names: &[String]) -> Result<&String> {
         .with_context(|| "Invalid group selection")
 }
 
-fn main() -> Result<()> {
-    let group_arg = Arg::new("group")
-        .short('g')
-        .long("group")
-        .help("Group name");
-    let package_arg = Arg::new("package").help("Package name").required(true);
+fn print_completion(shell: Shell) {
+    let mut cmd = cli::get_cli();
+    let name = cmd.get_name().to_string();
 
-    let matches = Command::new("shvl")
-        .disable_help_subcommand(true)
-        .subcommand_required(true)
-        .arg_required_else_help(true)
-        .subcommand(
-            Command::new("add")
-                .about("Add a package to a group")
-                .arg(package_arg.clone())
-                .arg(group_arg.clone()),
-        )
-        .subcommand(
-            Command::new("remove")
-                .alias("rm")
-                .about("Remove a package from a group")
-                .arg(package_arg.clone())
-                .arg(group_arg.clone()),
-        )
-        .subcommand(
-            Command::new("group")
-                .about("Group commands")
-                .disable_help_subcommand(true)
-                .subcommand_required(true)
-                .arg_required_else_help(true)
-                .subcommand(
-                    Command::new("create")
-                        .about("Create a group")
-                        .arg(Arg::new("group").help("Group name").required(true)),
-                )
-                .subcommand(
-                    Command::new("info")
-                        .about("Get a info about a group")
-                        .arg(Arg::new("group").help("Group name").required(true)),
-                )
-                .subcommand(
-                    Command::new("remove")
-                        .about("Remove a group")
-                        .arg(Arg::new("group").help("Group name").required(true)),
-                )
-                .subcommand(Command::new("list").about("List groups")),
-        )
-        .arg(Arg::new("dir").help("Set base dir").short('d').long("dir"))
-        .arg(
-            Arg::new("config_path")
-                .help("Set config file path")
-                .long("config"),
-        )
-        .arg(
-            Arg::new("verbose")
-                .help("Enable verbose logs")
-                .short('v')
-                .long("verbose")
-                .action(ArgAction::SetTrue),
-        )
-        .get_matches();
+    generate(shell, &mut cmd, name, &mut io::stdout());
+}
+
+fn main() -> Result<()> {
+    let matches = cli::get_cli().get_matches();
+
+    if let Some(submatches) = matches.subcommand_matches("completion") {
+        let shell = submatches.get_one::<Shell>("shell").expect("shell");
+        print_completion(shell.to_owned());
+
+        return Ok(());
+    }
 
     let base_dir = matches.get_one::<String>("dir").cloned();
     let config_path = matches.get_one::<String>("config").cloned();
